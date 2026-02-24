@@ -10,9 +10,13 @@ from config.settings import NEWS_CATEGORIES
 
 
 def escape_md(text: str) -> str:
-    """Escape special characters for Telegram MarkdownV2."""
-    special = r'_*[]()~`>#+-=|{}.!'
-    return "".join(f"\\{c}" if c in special else c for c in str(text))
+    """Escape ALL special characters for Telegram MarkdownV2."""
+    special = ['\\', '_', '*', '[', ']', '(', ')', '~', '`', '>',
+               '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    result = str(text)
+    for c in special:
+        result = result.replace(c, f'\\{c}')
+    return result
 
 
 def format_breaking_news(item: dict) -> str:

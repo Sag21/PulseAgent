@@ -30,10 +30,56 @@ def _call_gemini(prompt: str, retries: int = 2) -> str:
             time.sleep(RATE_LIMIT_DELAY)
             return response.text.strip()
         except Exception as e:
-            logger.error(f"Gemini API error (attempt {attempt + 1}): {e}")
+            error_str = str(e)
+            logger.error(f"Gemini API error (attempt {attempt + 1}): {error_str[:200]}")
+            # If quota exhausted (429), stop retrying immediately - no point waiting
+            if "429" in error_str or "quota" in error_str.lower():
+                logger.warning("Gemini quota exhausted - skipping retries, using fallback.")
+                return ""
             if attempt < retries:
                 time.sleep(10)
     return ""
+
+
+def make_fallback_summary(title: str, snippet: str = "") -> dict:
+    """
+    When Gemini is unavailable, build a basic summary from
+    the article title and NewsAPI description snippet directly.
+    No AI needed.
+    """
+    if snippet and len(snippet) > 20:
+        summary = f"• {snippet[:300]}"
+    else:
+        summary = f"• {title}"
+
+    return {
+        "summary": summary,
+        "category": _guess_category(title),
+        "is_breaking": any(kw in title.lower() for kw in [
+            "breaking", "urgent", "alert", "attack", "disaster",
+            "earthquake", "explosion", "crash", "emergency"
+        ])
+    }
+
+
+def _guess_category(title: str) -> str:
+    """Guess category from title keywords when Gemini is unavailable."""
+    title_lower = title.lower()
+    if any(w in title_lower for w in ["stock", "market", "sensex", "nifty", "nasdaq", "economy", "trade", "gdp"]):
+        return "Stock & Market"
+    if any(w in title_lower for w in ["cricket", "football", "ipl", "fifa", "sport", "match", "tournament", "player"]):
+        return "Sports"
+    if any(w in title_lower for w in ["film", "movie", "actor", "actress", "bollywood", "hollywood", "cinema"]):
+        return "Films & Entertainment"
+    if any(w in title_lower for w in ["music", "song", "album", "singer", "concert"]):
+        return "Music"
+    if any(w in title_lower for w in ["tech", "ai ", "software", "apple", "google", "microsoft", "startup", "cyber"]):
+        return "Technology"
+    if any(w in title_lower for w in ["health", "hospital", "disease", "vaccine", "cancer", "medical", "doctor"]):
+        return "Health"
+    if any(w in title_lower for w in ["science", "space", "nasa", "climate", "environment", "planet"]):
+        return "Science"
+    return "World News"
 
 
 def summarize_youtube_video(video_url: str, title: str) -> dict:
@@ -111,12 +157,11 @@ End with: "⏰ Summary generated at [current time]"
 def batch_summarize(items: list[dict], source_type: str) -> list[dict]:
     """
     Process a batch of items with rate limiting.
-    items: list of {id, title, url, summary_hint, source_type}
-    Returns items with 'ai_summary', 'category', 'is_breaking' added.
+    Falls back to snippet-based summary if Gemini is unavailable.
     """
     processed = []
     for i, item in enumerate(items):
-        logger.info(f"🤖 Processing [{i+1}/{len(items)}]: {item['title'][:60]}")
+        logger.info(f"Processing [{i+1}/{len(items)}]: {item['title'][:60]}")
 
         if source_type == "youtube":
             result = summarize_youtube_video(item["url"], item["title"])
@@ -125,14 +170,22 @@ def batch_summarize(items: list[dict], source_type: str) -> list[dict]:
                 item["url"], item["title"], item.get("summary_hint", "")
             )
 
-        item["ai_summary"] = result.get("summary", "Summary unavailable.")
+        # If Gemini failed (empty summary), use fallback directly from snippet
+        if not result.get("summary") or result["summary"] == f"📄 {item.get('title', '')}":
+            result = make_fallback_summary(
+                item["title"],
+                item.get("summary_hint", "")
+            )
+            logger.info(f"  Used fallback summary for: {item['title'][:50]}")
+
+        item["ai_summary"] = result.get("summary", f"• {item['title']}")
         item["category"] = result.get("category", "World News")
         item["is_breaking"] = result.get("is_breaking", False)
         processed.append(item)
 
-        # Batch pause every 5 items to respect free tier limits
+        # Batch pause every 5 items
         if (i + 1) % 5 == 0:
-            logger.info("⏸️  Rate limit pause (12 seconds)...")
+            logger.info("Rate limit pause (12 seconds)...")
             time.sleep(12)
 
     return processed

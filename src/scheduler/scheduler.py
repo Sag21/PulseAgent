@@ -69,7 +69,6 @@ def attach_scheduler(app: Application):
             ("menu", "Open main menu"),
             ("status", "Check bot status"),
             ("fetch_now", "Fetch latest news right now"),
-            ("digest_now", "Send digest immediately, don't wait for 7PM"),
         ])
 
     async def on_shutdown(application: Application):

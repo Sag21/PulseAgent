@@ -183,23 +183,68 @@ async def send_message_to_all_users(text: str, parse_mode=ParseMode.MARKDOWN_V2)
             logger.error(f"Failed to send to {user_id}: {e}")
 
 async def cmd_fetch_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Manually trigger news collection right now."""
+    """Fetch all news and send directly to user — no queue, instant output."""
     if not is_authorized(update):
         return await unauthorized_reply(update)
-    await update.message.reply_text("Fetching latest news now... this may take 2-3 minutes.")
-    from src.scheduler.jobs import run_news_collector, run_youtube_monitor
-    await run_news_collector()
-    await run_youtube_monitor()
-    await update.message.reply_text("Done! News collected and added to digest queue. Use /digest_now to send it.")
 
+    await update.message.reply_text(
+        "Fetching latest news now... sending results directly. This may take 2-3 minutes."
+    )
 
-async def cmd_digest_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Manually send the digest right now, don't wait for 7 PM."""
-    if not is_authorized(update):
-        return await unauthorized_reply(update)
-    await update.message.reply_text("Sending your digest now...")
-    from src.scheduler.jobs import run_evening_digest
-    await run_evening_digest()
+    from src.scrapers.news_scraper import fetch_rss_articles, fetch_all_category_news
+    from src.scrapers.youtube_scraper import fetch_new_youtube_videos
+    from src.processors.ai_processor import batch_summarize
+    from src.processors.message_formatter import format_evening_digest, format_youtube_update
+    from src.database.db import mark_as_sent
+
+    # Fetch all sources
+    rss_items = fetch_rss_articles()
+    news_items = fetch_all_category_news()
+    youtube_items = fetch_new_youtube_videos()
+    all_news = rss_items + news_items
+
+    if not all_news and not youtube_items:
+        await update.message.reply_text("No new articles or videos found right now.")
+        return
+
+    await update.message.reply_text(
+        f"Found {len(all_news)} news articles and {len(youtube_items)} YouTube videos. Summarizing..."
+    )
+
+    # Send news digest directly
+    if all_news:
+        processed_news = batch_summarize(all_news, source_type="news")
+        messages = format_evening_digest(processed_news)
+        for msg in messages:
+            try:
+                await update.message.reply_text(
+                    msg, parse_mode="MarkdownV2", disable_web_page_preview=True
+                )
+            except Exception:
+                # Strip markdown and send as plain text if formatting fails
+                import re
+                plain = re.sub(r'\\(.)', r'\1', msg)
+                await update.message.reply_text(plain, disable_web_page_preview=True)
+        for item in processed_news:
+            mark_as_sent(item["id"], item["source_type"], item["title"])
+
+    # Send YouTube updates directly
+    if youtube_items:
+        processed_yt = batch_summarize(youtube_items, source_type="youtube")
+        for item in processed_yt:
+            try:
+                msg = format_youtube_update(item)
+                await update.message.reply_text(
+                    msg, parse_mode="MarkdownV2", disable_web_page_preview=True
+                )
+            except Exception:
+                await update.message.reply_text(
+                    f"New Video: {item['title']}\n{item.get('url', '')}",
+                    disable_web_page_preview=True
+                )
+            mark_as_sent(item["id"], "youtube", item["title"])
+
+    await update.message.reply_text("All done! Everything above is your latest update.")
 
 
 def build_app() -> Application:
@@ -217,7 +262,6 @@ def build_app() -> Application:
     _app.add_handler(CommandHandler("menu", cmd_menu))
     _app.add_handler(CommandHandler("status", cmd_status))
     _app.add_handler(CommandHandler("fetch_now", cmd_fetch_now))
-    _app.add_handler(CommandHandler("digest_now", cmd_digest_now))
     _app.add_handler(CallbackQueryHandler(handle_callback))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
     logger.info("Telegram app built successfully.")
