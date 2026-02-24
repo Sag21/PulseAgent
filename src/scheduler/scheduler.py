@@ -1,13 +1,15 @@
 """
 src/scheduler/scheduler.py
-===========================
-Sets up APScheduler with all cron jobs.
+Attaches APScheduler to the bot's event loop via post_init hook.
+This avoids the "event loop already running" crash on Windows.
 """
 
 import logging
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler # type: ignore
+from apscheduler.triggers.cron import CronTrigger # type: ignore
+from apscheduler.triggers.interval import IntervalTrigger # type: ignore
+from telegram.ext import Application # type: ignore
+
 from config.settings import (
     EVENING_DIGEST_HOUR, EVENING_DIGEST_MINUTE,
     MORNING_MARKET_HOUR, MORNING_MARKET_MINUTE,
@@ -17,8 +19,7 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 
 
-async def start_scheduler() -> AsyncIOScheduler:
-    """Initialize and start all scheduled jobs."""
+def attach_scheduler(app: Application):
     from src.scheduler.jobs import (
         run_breaking_news_check,
         run_evening_digest,
@@ -27,63 +28,43 @@ async def start_scheduler() -> AsyncIOScheduler:
         run_news_collector
     )
 
-    scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")  # IST timezone
+    scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
 
-    # 🚨 Breaking news — every 30 minutes
     scheduler.add_job(
         run_breaking_news_check,
         trigger=IntervalTrigger(minutes=BREAKING_NEWS_INTERVAL_MIN),
-        id="breaking_news",
-        name="Breaking News Check",
-        replace_existing=True
+        id="breaking_news", name="Breaking News Check", replace_existing=True
     )
-
-    # 📺 YouTube monitor — every 60 minutes
     scheduler.add_job(
         run_youtube_monitor,
         trigger=IntervalTrigger(minutes=60),
-        id="youtube_monitor",
-        name="YouTube Monitor",
-        replace_existing=True
+        id="youtube_monitor", name="YouTube Monitor", replace_existing=True
     )
-
-    # 📰 News collector — every 60 minutes (offset by 30 min from YouTube)
     scheduler.add_job(
         run_news_collector,
         trigger=IntervalTrigger(minutes=60, start_date="2024-01-01 00:30:00"),
-        id="news_collector",
-        name="News Collector",
-        replace_existing=True
+        id="news_collector", name="News Collector", replace_existing=True
     )
-
-    # 🌙 Evening digest — daily at 7:00 PM IST
     scheduler.add_job(
         run_evening_digest,
-        trigger=CronTrigger(
-            hour=EVENING_DIGEST_HOUR,
-            minute=EVENING_DIGEST_MINUTE
-        ),
-        id="evening_digest",
-        name="Evening Digest",
-        replace_existing=True
+        trigger=CronTrigger(hour=EVENING_DIGEST_HOUR, minute=EVENING_DIGEST_MINUTE),
+        id="evening_digest", name="Evening Digest", replace_existing=True
     )
-
-    # ☀️ Morning market briefing — daily at 8:00 AM IST
     scheduler.add_job(
         run_morning_market,
-        trigger=CronTrigger(
-            hour=MORNING_MARKET_HOUR,
-            minute=MORNING_MARKET_MINUTE
-        ),
-        id="morning_market",
-        name="Morning Market Briefing",
-        replace_existing=True
+        trigger=CronTrigger(hour=MORNING_MARKET_HOUR, minute=MORNING_MARKET_MINUTE),
+        id="morning_market", name="Morning Market Briefing", replace_existing=True
     )
 
-    scheduler.start()
+    async def on_startup(application: Application):
+        scheduler.start()
+        logger.info("Scheduler started with jobs:")
+        for job in scheduler.get_jobs():
+            logger.info(f"  - {job.name} | next run: {job.next_run_time}")
 
-    logger.info("✅ Scheduler started with jobs:")
-    for job in scheduler.get_jobs():
-        logger.info(f"   📅 {job.name} — next run: {job.next_run_time}")
+    async def on_shutdown(application: Application):
+        scheduler.shutdown(wait=False)
+        logger.info("Scheduler stopped.")
 
-    return scheduler
+    app.post_init = on_startup
+    app.post_shutdown = on_shutdown
