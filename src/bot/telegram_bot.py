@@ -182,6 +182,25 @@ async def send_message_to_all_users(text: str, parse_mode=ParseMode.MARKDOWN_V2)
         except Exception as e:
             logger.error(f"Failed to send to {user_id}: {e}")
 
+async def cmd_fetch_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manually trigger news collection right now."""
+    if not is_authorized(update):
+        return await unauthorized_reply(update)
+    await update.message.reply_text("Fetching latest news now... this may take 2-3 minutes.")
+    from src.scheduler.jobs import run_news_collector, run_youtube_monitor
+    await run_news_collector()
+    await run_youtube_monitor()
+    await update.message.reply_text("Done! News collected and added to digest queue. Use /digest_now to send it.")
+
+
+async def cmd_digest_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manually send the digest right now, don't wait for 7 PM."""
+    if not is_authorized(update):
+        return await unauthorized_reply(update)
+    await update.message.reply_text("Sending your digest now...")
+    from src.scheduler.jobs import run_evening_digest
+    await run_evening_digest()
+
 
 def build_app() -> Application:
     global _app
@@ -197,6 +216,8 @@ def build_app() -> Application:
     _app.add_handler(CommandHandler("start", cmd_start))
     _app.add_handler(CommandHandler("menu", cmd_menu))
     _app.add_handler(CommandHandler("status", cmd_status))
+    _app.add_handler(CommandHandler("fetch_now", cmd_fetch_now))
+    _app.add_handler(CommandHandler("digest_now", cmd_digest_now))
     _app.add_handler(CallbackQueryHandler(handle_callback))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
     logger.info("Telegram app built successfully.")

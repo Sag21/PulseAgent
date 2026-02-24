@@ -61,6 +61,15 @@ def attach_scheduler(app: Application):
         logger.info("Scheduler started with jobs:")
         for job in scheduler.get_jobs():
             logger.info(f"  - {job.name} | next run: {job.next_run_time}")
+        
+        # Register bot commands so they show in Telegram menu
+        await application.bot.set_my_commands([
+            ("start", "Welcome message"),
+            ("menu", "Open main menu"),
+            ("status", "Check bot status"),
+            ("fetch_now", "Fetch latest news right now"),
+            ("digest_now", "Send digest immediately, don't wait for 7PM"),
+        ])
 
     async def on_shutdown(application: Application):
         if scheduler.running:  # Only shutdown if it actually started
