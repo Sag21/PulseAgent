@@ -30,7 +30,7 @@ EVENING_DIGEST_MINUTE = 0
 MORNING_MARKET_HOUR = 8       # 8:00 AM
 MORNING_MARKET_MINUTE = 0
 BREAKING_NEWS_INTERVAL_MIN = 30   # Check for breaking news every 30 minutes
-NEWSAPI_MAX_CATEGORIES_PER_RUN = 3  # Fetch only 3 categories per hour instead of all 7
+NEWS_FETCH_INTERVAL_MIN = 15
 
 # ── RSS / YouTube Channels (add channel IDs here) ────────────────────────────
 # To find a channel ID: go to the channel → view page source → search "channel_id"

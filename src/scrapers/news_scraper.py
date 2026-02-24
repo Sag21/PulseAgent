@@ -138,18 +138,10 @@ def fetch_breaking_news_candidates() -> list[dict]:
 
 
 def fetch_all_category_news() -> list[dict]:
-    """Fetch news for categories in rotation to save API quota."""
-    from config.settings import NEWSAPI_MAX_CATEGORIES_PER_RUN
+    """Fetch news for all major NewsAPI categories."""
     api_categories = ["general", "technology", "sports", "entertainment",
                       "business", "health", "science"]
-    
-    # Rotate which categories we fetch each run to spread quota usage
-    import datetime
-    hour = datetime.datetime.now().hour
-    start = (hour % len(api_categories))
-    selected = (api_categories + api_categories)[start:start + NEWSAPI_MAX_CATEGORIES_PER_RUN]
-    
     all_articles = []
-    for cat in selected:
+    for cat in api_categories:
         all_articles.extend(fetch_news_by_category(cat))
     return all_articles

@@ -50,10 +50,11 @@ def attach_scheduler(app: Application):
         trigger=CronTrigger(hour=EVENING_DIGEST_HOUR, minute=EVENING_DIGEST_MINUTE),
         id="evening_digest", name="Evening Digest", replace_existing=True
     )
+    from config.settings import NEWS_FETCH_INTERVAL_MIN
     scheduler.add_job(
-        run_morning_market,
-        trigger=CronTrigger(hour=MORNING_MARKET_HOUR, minute=MORNING_MARKET_MINUTE),
-        id="morning_market", name="Morning Market Briefing", replace_existing=True
+        run_news_collector,
+        trigger=IntervalTrigger(minutes=NEWS_FETCH_INTERVAL_MIN),
+        id="news_collector", name="News Collector", replace_existing=True
     )
 
     async def on_startup(application: Application):
