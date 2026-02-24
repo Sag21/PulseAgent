@@ -5,7 +5,7 @@ Central configuration. All secrets come from .env file.
 """
 
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv # type: ignore
 
 load_dotenv()
 
@@ -19,7 +19,7 @@ ALLOWED_USER_IDS = [
 
 # ── Gemini AI ─────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-1.5-flash"  # Free tier model (use gemini-1.5-pro if you have Pro)
+GEMINI_MODEL = "gemini-2.0-flash"  # Free tier model (use gemini-1.5-pro if you have Pro)
 
 # ── NewsAPI ───────────────────────────────────────────────────────────────────
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")  # Free at newsapi.org
@@ -30,6 +30,7 @@ EVENING_DIGEST_MINUTE = 0
 MORNING_MARKET_HOUR = 8       # 8:00 AM
 MORNING_MARKET_MINUTE = 0
 BREAKING_NEWS_INTERVAL_MIN = 30   # Check for breaking news every 30 minutes
+NEWSAPI_MAX_CATEGORIES_PER_RUN = 3  # Fetch only 3 categories per hour instead of all 7
 
 # ── RSS / YouTube Channels (add channel IDs here) ────────────────────────────
 # To find a channel ID: go to the channel → view page source → search "channel_id"

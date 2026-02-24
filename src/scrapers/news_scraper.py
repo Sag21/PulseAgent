@@ -6,8 +6,8 @@ Fetches articles from:
   2. NewsAPI for category-based news
 """
 
-import feedparser
-import requests
+import feedparser # type: ignore
+import requests # type: ignore
 import logging
 from config.settings import CUSTOM_RSS_FEEDS, NEWS_API_KEY, BREAKING_KEYWORDS
 from src.database.db import is_already_sent
@@ -138,11 +138,18 @@ def fetch_breaking_news_candidates() -> list[dict]:
 
 
 def fetch_all_category_news() -> list[dict]:
-    """Fetch news for all major NewsAPI categories."""
-    # NewsAPI supported categories
+    """Fetch news for categories in rotation to save API quota."""
+    from config.settings import NEWSAPI_MAX_CATEGORIES_PER_RUN
     api_categories = ["general", "technology", "sports", "entertainment",
                       "business", "health", "science"]
+    
+    # Rotate which categories we fetch each run to spread quota usage
+    import datetime
+    hour = datetime.datetime.now().hour
+    start = (hour % len(api_categories))
+    selected = (api_categories + api_categories)[start:start + NEWSAPI_MAX_CATEGORIES_PER_RUN]
+    
     all_articles = []
-    for cat in api_categories:
+    for cat in selected:
         all_articles.extend(fetch_news_by_category(cat))
     return all_articles

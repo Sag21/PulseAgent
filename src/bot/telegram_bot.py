@@ -186,7 +186,14 @@ async def send_message_to_all_users(text: str, parse_mode=ParseMode.MARKDOWN_V2)
 def build_app() -> Application:
     global _app
     init_db()
-    _app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    from telegram.request import HTTPXRequest # type: ignore
+    request = HTTPXRequest(
+        connect_timeout=30.0,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        pool_timeout=30.0,
+    )
+    _app = Application.builder().token(TELEGRAM_BOT_TOKEN).request(request).build()
     _app.add_handler(CommandHandler("start", cmd_start))
     _app.add_handler(CommandHandler("menu", cmd_menu))
     _app.add_handler(CommandHandler("status", cmd_status))

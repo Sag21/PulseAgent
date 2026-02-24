@@ -63,8 +63,9 @@ def attach_scheduler(app: Application):
             logger.info(f"  - {job.name} | next run: {job.next_run_time}")
 
     async def on_shutdown(application: Application):
-        scheduler.shutdown(wait=False)
-        logger.info("Scheduler stopped.")
+        if scheduler.running:  # Only shutdown if it actually started
+            scheduler.shutdown(wait=False)
+            logger.info("Scheduler stopped.")
 
     app.post_init = on_startup
     app.post_shutdown = on_shutdown

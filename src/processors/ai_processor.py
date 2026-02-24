@@ -8,7 +8,7 @@ Handles all Gemini API calls:
   - Detect if content is breaking news
 """
 
-import google.generativeai as genai
+import google.generativeai as genai # type: ignore
 import logging
 import time
 from config.settings import GEMINI_API_KEY, GEMINI_MODEL, NEWS_CATEGORIES
