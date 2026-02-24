@@ -106,3 +106,13 @@ def clear_old_digest(days: int = 2):
             "DELETE FROM digest_queue WHERE is_sent = 1 AND created_at < datetime('now', ?)",
             (f"-{days} days",)
         )
+
+def get_todays_all_items() -> list:
+    """Get ALL items collected today (both sent and unsent) for day summary."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM digest_queue 
+               WHERE date(created_at) = date('now', 'localtime')
+               ORDER BY category ASC, created_at ASC"""
+        ).fetchall()
+        return [dict(r) for r in rows]

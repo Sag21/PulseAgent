@@ -59,7 +59,10 @@ async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Breaking News Now", callback_data="menu_breaking"),
         ],
         [
+            InlineKeyboardButton("Complete Day Summary", callback_data="menu_day_summary"),
             InlineKeyboardButton("Status", callback_data="menu_status"),
+        ],
+        [
             InlineKeyboardButton("Help", callback_data="menu_help"),
         ]
     ]
@@ -138,6 +141,74 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = format_category_update(category, content)
             await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
 
+    elif data == "menu_day_summary":
+        await query.edit_message_text("Preparing complete day summary...")
+        from src.database.db import get_todays_all_items
+        from src.processors.message_formatter import format_evening_digest, format_youtube_update
+
+        items = get_todays_all_items()
+        if not items:
+            await query.edit_message_text(
+                "No items collected today yet. Use /fetch\\_now first.",
+                parse_mode="MarkdownV2"
+            )
+            return
+
+        youtube_items = [i for i in items if i["source_type"] == "youtube"]
+        news_items = [i for i in items if i["source_type"] != "youtube"]
+
+        await query.edit_message_text(
+            f"Found {len(news_items)} news + {len(youtube_items)} videos today. Sending now..."
+        )
+
+        if news_items:
+            formatted = [{
+                "id": i["item_id"],
+                "title": i["title"],
+                "ai_summary": i["summary"] or f"• {i['title']}",
+                "category": i["category"] or "World News",
+                "url": i["source_url"],
+                "source_type": i["source_type"]
+            } for i in news_items]
+
+            messages = format_evening_digest(formatted)
+            for msg in messages:
+                try:
+                    await _app.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=msg, parse_mode="MarkdownV2",
+                        disable_web_page_preview=True
+                    )
+                except Exception:
+                    import re
+                    plain = re.sub(r'\\(.)', r'\1', msg)
+                    await _app.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=plain, disable_web_page_preview=True
+                    )
+
+        if youtube_items:
+            for i in youtube_items:
+                item = {
+                    "title": i["title"],
+                    "ai_summary": i["summary"] or f"• {i['title']}",
+                    "category": i["category"] or "General",
+                    "url": i["source_url"],
+                    "channel": "YouTube"
+                }
+                try:
+                    msg = format_youtube_update(item)
+                    await _app.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=msg, parse_mode="MarkdownV2",
+                        disable_web_page_preview=True
+                    )
+                except Exception:
+                    await _app.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=f"Video: {i['title']}\n{i['source_url']}",
+                        disable_web_page_preview=True
+                    )
 
 async def show_category_keyboard(query):
     buttons = []
@@ -246,6 +317,84 @@ async def cmd_fetch_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("All done! Everything above is your latest update.")
 
+async def cmd_day_summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send complete summary of everything collected today."""
+    if not is_authorized(update):
+        return await unauthorized_reply(update)
+
+    await update.message.reply_text(
+        "Preparing your complete day summary... fetching everything collected today."
+    )
+
+    from src.database.db import get_todays_all_items
+    from src.processors.message_formatter import format_evening_digest, format_youtube_update
+
+    items = get_todays_all_items()
+
+    if not items:
+        await update.message.reply_text(
+            "No items collected today yet. Use /fetch_now to fetch latest news first."
+        )
+        return
+
+    # Separate youtube and news
+    youtube_items = [i for i in items if i["source_type"] == "youtube"]
+    news_items = [i for i in items if i["source_type"] != "youtube"]
+
+    await update.message.reply_text(
+        f"Today's collection: {len(news_items)} news articles + {len(youtube_items)} YouTube videos."
+    )
+
+    # Send news digest
+    if news_items:
+        # Convert db rows to format expected by formatter
+        formatted = [{
+            "id": i["item_id"],
+            "title": i["title"],
+            "ai_summary": i["summary"] or f"• {i['title']}",
+            "category": i["category"] or "World News",
+            "url": i["source_url"],
+            "source_type": i["source_type"]
+        } for i in news_items]
+
+        messages = format_evening_digest(formatted)
+        for msg in messages:
+            try:
+                await update.message.reply_text(
+                    msg, parse_mode="MarkdownV2", disable_web_page_preview=True
+                )
+            except Exception:
+                import re
+                plain = re.sub(r'\\(.)', r'\1', msg)
+                await update.message.reply_text(plain, disable_web_page_preview=True)
+
+    # Send YouTube items
+    if youtube_items:
+        await update.message.reply_text("--- YouTube Videos Today ---")
+        for i in youtube_items:
+            item = {
+                "title": i["title"],
+                "ai_summary": i["summary"] or f"• {i['title']}",
+                "category": i["category"] or "General",
+                "url": i["source_url"],
+                "channel": "YouTube"
+            }
+            try:
+                msg = format_youtube_update(item)
+                await update.message.reply_text(
+                    msg, parse_mode="MarkdownV2", disable_web_page_preview=True
+                )
+            except Exception:
+                await update.message.reply_text(
+                    f"Video: {i['title']}\n{i['source_url']}",
+                    disable_web_page_preview=True
+                )
+
+    from datetime import datetime
+    time_str = datetime.now().strftime("%I:%M %p")
+    await update.message.reply_text(
+        f"Complete day summary done. All news collected from midnight till {time_str}."
+    )
 
 def build_app() -> Application:
     global _app
@@ -262,6 +411,7 @@ def build_app() -> Application:
     _app.add_handler(CommandHandler("menu", cmd_menu))
     _app.add_handler(CommandHandler("status", cmd_status))
     _app.add_handler(CommandHandler("fetch_now", cmd_fetch_now))
+    _app.add_handler(CommandHandler("day_summary", cmd_day_summary))
     _app.add_handler(CallbackQueryHandler(handle_callback))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
     logger.info("Telegram app built successfully.")
