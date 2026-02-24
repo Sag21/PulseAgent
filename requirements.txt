@@ -1,0 +1,24 @@
+# PulseAgent — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Telegram Bot
+python-telegram-bot==21.5
+
+# Google Gemini AI
+google-generativeai==0.7.2
+
+# Scheduling
+APScheduler==3.10.4
+
+# RSS Feed Parsing
+feedparser==6.0.11
+
+# HTTP requests (for NewsAPI)
+requests==2.32.3
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Web scraping fallback
+beautifulsoup4==4.12.3
+lxml==5.2.2
